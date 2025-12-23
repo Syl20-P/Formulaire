@@ -1,8 +1,53 @@
-async function initForm() {
-  const response = await fetch("https://n8n.srv1108117.hstgr.cloud/webhook/get-equipements");
-  const equipments = await response.json();
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Valise Equipements</title>
+</head>
+<body>
+<h2>Valise - Déplacement Equipements</h2>
 
-  // Locations uniques valides
+<form id="valiseForm">
+  <label>Origine :</label>
+  <select id="origine" required></select><br><br>
+
+  <label>Destination :</label>
+  <select id="destination" required></select><br><br>
+
+  <h3>Équipements dans la valise :</h3>
+  <div id="equipementsContainer"></div>
+
+  <button type="submit">Envoyer</button>
+</form>
+
+<script>
+// Webhook de réception des données du formulaire
+const webhookURL = "https://n8n.srv1108117.hstgr.cloud/webhook/valise-form"; // Remplace par ton webhook de traitement
+
+// Webhook pour récupérer les équipements depuis Notion via n8n
+const equipmentsWebhookURL = "https://n8n.srv1108117.hstgr.cloud/webhook/get-equipements"; // webhook de production
+
+// Récupère les équipements depuis le webhook
+async function fetchEquipments() {
+  try {
+    const response = await fetch(equipmentsWebhookURL);
+    const data = await response.json();
+    if(!Array.isArray(data)) {
+      console.error("La réponse du webhook n'est pas un tableau :", data);
+      return [];
+    }
+    return data;
+  } catch (err) {
+    console.error("Erreur lors du fetch des équipements :", err);
+    return [];
+  }
+}
+
+// Initialisation du formulaire
+async function initForm() {
+  const equipments = await fetchEquipments();
+
+  // Filtrer les locations valides
   const locationsSet = new Set(
     equipments.map(e => e.property_location).filter(loc => loc)
   );
@@ -15,7 +60,7 @@ async function initForm() {
     destinationSelect.appendChild(d);
   });
 
-  // Équipements
+  // Générer la liste des équipements
   const container = document.getElementById("equipementsContainer");
   equipments.forEach(e => {
     if(e.name && e.property_quantity_in_stock != null) {
@@ -29,3 +74,48 @@ async function initForm() {
     }
   });
 }
+
+// Envoi du formulaire au webhook
+document.getElementById("valiseForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const origine = document.getElementById("origine").value;
+  const destination = document.getElementById("destination").value;
+
+  const formData = [];
+  document.querySelectorAll("input[name='equipement']").forEach(checkbox => {
+    if (checkbox.checked) {
+      const qtyInput = document.querySelector(`input[name="qty_${checkbox.value}"]`);
+      const qty = parseInt(qtyInput.value) || 0;
+      formData.push({
+        equipement: checkbox.value,
+        quantite: qty,
+        origine,
+        destination
+      });
+    }
+  });
+
+  if(formData.length === 0) {
+    alert("Veuillez cocher au moins un équipement.");
+    return;
+  }
+
+  try {
+    const response = await fetch(webhookURL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formData)
+    });
+    if(response.ok) alert("Valise envoyée !");
+    else alert("Erreur lors de l'envoi");
+  } catch(err) {
+    console.error("Erreur lors de l'envoi au webhook :", err);
+    alert("Erreur lors de l'envoi");
+  }
+});
+
+// Initialiser le formulaire au chargement
+initForm();
+</script>
+</body>
+</html>
