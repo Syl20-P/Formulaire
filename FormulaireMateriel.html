@@ -21,16 +21,17 @@
 </form>
 
 <script>
-const webhookURL = "https://n8n.srv1108117.hstgr.cloud/webhook/valise-form"; // POST des réponses
-
-const equipmentsURL = "https://n8n.srv1108117.hstgr.cloud/webhook/get-equipements"; // GET des équipements
+const getEquipmentsURL = "https://n8n.srv1108117.hstgr.cloud/webhook/get-equipements"; // Webhook pour récupérer équipements
+const submitWebhookURL = "https://n8n.srv1108117.hstgr.cloud/webhook/valise-form"; // Webhook pour envoyer le formulaire
 
 async function fetchEquipments() {
-  const response = await fetch(equipmentsURL);
+  const response = await fetch(getEquipmentsURL);
+  if(!response.ok) {
+    alert("Impossible de récupérer les équipements !");
+    return [];
+  }
   const data = await response.json();
-
-  // Si n8n renvoie items.json, on aplati le tableau
-  return data.map(e => e.json ? e.json : e);
+  return data.map(item => item.json); // Transforme en tableau simple
 }
 
 async function initForm() {
@@ -43,14 +44,13 @@ async function initForm() {
   locationsSet.forEach(loc => {
     const o = document.createElement("option");
     o.value = loc; o.textContent = loc;
-    origineSelect.appendChild(o);
-
     const d = document.createElement("option");
     d.value = loc; d.textContent = loc;
+    origineSelect.appendChild(o);
     destinationSelect.appendChild(d);
   });
 
-  // Générer la liste des équipements avec checkbox et champ quantité
+  // Générer la liste des équipements
   const container = document.getElementById("equipementsContainer");
   equipments.forEach(e => {
     const div = document.createElement("div");
@@ -65,7 +65,7 @@ async function initForm() {
 
 initForm();
 
-// Envoi du formulaire à n8n
+// Envoi du formulaire
 document.getElementById("valiseForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const origine = document.getElementById("origine").value;
@@ -84,8 +84,7 @@ document.getElementById("valiseForm").addEventListener("submit", async (e) => {
     }
   });
 
-  // Envoi via POST
-  const response = await fetch(webhookURL, {
+  const response = await fetch(submitWebhookURL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(formData)
