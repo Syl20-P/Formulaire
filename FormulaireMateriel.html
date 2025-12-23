@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Valise Equipements</title>
+</head>
+<body>
+<h2>Valise - Déplacement Equipements</h2>
+
+<form id="valiseForm">
+  <label>Origine :</label>
+  <select id="origine" required></select><br><br>
+
+  <label>Destination :</label>
+  <select id="destination" required></select><br><br>
+
+  <h3>Équipements dans la valise :</h3>
+  <div id="equipementsContainer"></div>
+
+  <button type="submit">Envoyer</button>
+</form>
+
+<script>
+const webhookURL = "https://YOUR_N8N_WEBHOOK_URL"; // remplace par ton webhook
+
+// Exemple : récupérer les équipements depuis ton workflow n8n ou API Notion
+// Ici simulé avec fetch JSON depuis n8n workflow
+async function fetchEquipments() {
+  const response = await fetch("https://YOUR_N8N_EQUIPMENTS_ENDPOINT"); // Node GetEquipments
+  const data = await response.json();
+  return data; // doit être un tableau {name, property_quantity_in_stock, property_location}
+}
+
+async function initForm() {
+  const equipments = await fetchEquipments();
+
+  // Récupérer toutes les locations uniques pour Origine et Destination
+  const locationsSet = new Set(equipments.map(e => e.property_location));
+  const origineSelect = document.getElementById("origine");
+  const destinationSelect = document.getElementById("destination");
+  locationsSet.forEach(loc => {
+    const o = document.createElement("option"); o.value = loc; o.textContent = loc;
+    const d = document.createElement("option"); d.value = loc; d.textContent = loc;
+    origineSelect.appendChild(o);
+    destinationSelect.appendChild(d);
+  });
+
+  // Générer la liste des équipements
+  const container = document.getElementById("equipementsContainer");
+  equipments.forEach(e => {
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <input type="checkbox" name="equipement" value="${e.name}" id="${e.name}">
+      <label for="${e.name}">${e.name} (${e.property_quantity_in_stock} dispo)</label>
+      Quantité: <input type="number" name="qty_${e.name}" min="0" value="0">
+    `;
+    container.appendChild(div);
+  });
+}
+
+initForm();
+
+// Envoi du formulaire à n8n
+document.getElementById("valiseForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const origine = document.getElementById("origine").value;
+  const destination = document.getElementById("destination").value;
+
+  const formData = [];
+  document.querySelectorAll("input[name='equipement']").forEach(checkbox => {
+    if (checkbox.checked) {
+      const qty = parseInt(document.querySelector(`input[name="qty_${checkbox.value}"]`).value);
+      formData.push({
+        equipement: checkbox.value,
+        quantite: qty,
+        origine,
+        destination
+      });
+    }
+  });
+
+  const response = await fetch(webhookURL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(formData)
+  });
+
+  if(response.ok) alert("Valise envoyée !");
+  else alert("Erreur lors de l'envoi");
+});
+</script>
+</body>
+</html>
