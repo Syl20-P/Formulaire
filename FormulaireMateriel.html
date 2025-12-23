@@ -26,7 +26,7 @@ const webhookURL = "https://ton-n8n-instance.com/webhook/valise-form";
 // Exemple : récupérer les équipements depuis ton workflow n8n ou API Notion
 // Ici simulé avec fetch JSON depuis n8n workflow
 async function fetchEquipments() {
-  const response = await fetch("https://n8n.srv1108117.hstgr.cloud/webhook-test/get-equipements");// Node GetEquipments
+  const response = await fetch("https://n8n.srv1108117.hstgr.cloud/webhook/get-equipements");// Node GetEquipments
   const data = await response.json();
   return data; // doit être un tableau {name, property_quantity_in_stock, property_location}
 }
