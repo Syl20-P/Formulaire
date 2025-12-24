@@ -2,87 +2,140 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Valise Equipements</title>
+<title>Valise - Déplacement Équipements</title>
+
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: auto;
+  }
+  .equipement {
+    margin-bottom: 6px;
+  }
+  .qty {
+    display: none;
+    width: 60px;
+    margin-left: 10px;
+  }
+</style>
 </head>
+
 <body>
-<h2>Valise - Déplacement Equipements</h2>
+
+<h2>Valise – Déplacement Équipements</h2>
 
 <form id="valiseForm">
+
   <label>Origine :</label>
-  <select id="origine" required></select><br><br>
+  <select id="origine" required></select>
+
+  <br><br>
 
   <label>Destination :</label>
-  <select id="destination" required></select><br><br>
+  <select id="destination" required></select>
 
-  <h3>Équipements dans la valise :</h3>
+  <br><br>
+
+  <h3>Équipements dans la valise</h3>
   <div id="equipementsContainer"></div>
 
+  <br>
   <button type="submit">Envoyer</button>
 </form>
 
 <script>
-const webhookURL = "https://ton-n8n-instance.com/webhook/valise-form"; 
-const equipmentsWebhookURL = "https://n8n.srv1108117.hstgr.cloud/webhook/get-equipements"; 
+/* ===============================
+   CONFIG
+================================ */
+const WEBHOOK_SUBMIT = "https://ton-n8n-instance.com/webhook/valise-form";
+const WEBHOOK_GET_EQUIP = "https://n8n.srv1108117.hstgr.cloud/webhook/get-equipements";
 
+/* ===============================
+   FETCH EQUIPEMENTS
+================================ */
 async function fetchEquipments() {
-  try {
-    const response = await fetch(equipmentsWebhookURL);
-    const data = await response.json();
-    return Array.isArray(data) ? data : [];
-  } catch (err) {
-    console.error("Erreur fetch équipements :", err);
-    return [];
-  }
+  const response = await fetch(WEBHOOK_GET_EQUIP);
+  return await response.json();
 }
 
+/* ===============================
+   INITIALISATION FORMULAIRE
+================================ */
 async function initForm() {
   const equipments = await fetchEquipments();
 
-  const locationsSet = new Set(
-    equipments.map(e => e.property_location).filter(loc => loc)
-  );
+  // --- Locations uniques ---
+  const locations = [...new Set(
+    equipments
+      .map(e => e.property_location)
+      .filter(l => l)
+  )];
+
   const origineSelect = document.getElementById("origine");
   const destinationSelect = document.getElementById("destination");
-  locationsSet.forEach(loc => {
-    const o = document.createElement("option"); o.value = loc; o.textContent = loc;
-    const d = document.createElement("option"); d.value = loc; d.textContent = loc;
-    origineSelect.appendChild(o);
-    destinationSelect.appendChild(d);
+
+  locations.forEach(loc => {
+    origineSelect.add(new Option(loc, loc));
+    destinationSelect.add(new Option(loc, loc));
   });
 
+  // --- Liste équipements ---
   const container = document.getElementById("equipementsContainer");
-  equipments.forEach(e => {
-    if(e.name) {
-      const div = document.createElement("div");
-      div.innerHTML = `
-        <input type="checkbox" name="equipement" value="${e.name}" id="${e.name}">
-        <label for="${e.name}">${e.name}</label>
-        Quantité: <input type="number" name="qty_${e.name}" min="0" value="0" disabled>
-      `;
-      container.appendChild(div);
 
-      // Activation du champ quantité uniquement si la case est cochée
-      const checkbox = div.querySelector(`input[name="equipement"]`);
-      const qtyInput = div.querySelector(`input[type="number"]`);
+  equipments
+    .filter(e => e.name && e.property_location)
+    .forEach(e => {
+      const safeId = e.name.replace(/[^a-zA-Z0-9]/g, "_");
+
+      const div = document.createElement("div");
+      div.className = "equipement";
+
+      div.innerHTML = `
+        <input type="checkbox" id="chk_${safeId}">
+        <label for="chk_${safeId}">${e.name}</label>
+
+        <input
+          type="number"
+          id="qty_${safeId}"
+          class="qty"
+          min="1"
+          value="1"
+        >
+      `;
+
+      const checkbox = div.querySelector(`#chk_${safeId}`);
+      const qtyInput = div.querySelector(`#qty_${safeId}`);
+
       checkbox.addEventListener("change", () => {
-        qtyInput.disabled = !checkbox.checked;
-        if(!checkbox.checked) qtyInput.value = 0; // reset à 0 si décoché
+        qtyInput.style.display = checkbox.checked ? "inline-block" : "none";
+        if (!checkbox.checked) qtyInput.value = 1;
       });
-    }
-  });
+
+      container.appendChild(div);
+    });
 }
 
+initForm();
+
+/* ===============================
+   ENVOI FORMULAIRE
+================================ */
 document.getElementById("valiseForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+
   const origine = document.getElementById("origine").value;
   const destination = document.getElementById("destination").value;
 
-  const formData = [];
-  document.querySelectorAll("input[name='equipement']").forEach(checkbox => {
-    if (checkbox.checked) {
-      const qty = parseInt(document.querySelector(`input[name="qty_${checkbox.value}"]`).value) || 0;
-      formData.push({
-        equipement: checkbox.value,
+  const payload = [];
+
+  document.querySelectorAll("input[type='checkbox']").forEach(cb => {
+    if (cb.checked) {
+      const id = cb.id.replace("chk_", "");
+      const qty = parseInt(document.getElementById(`qty_${id}`).value);
+
+      payload.push({
+        equipement: cb.nextElementSibling.textContent,
         quantite: qty,
         origine,
         destination
@@ -90,26 +143,22 @@ document.getElementById("valiseForm").addEventListener("submit", async (e) => {
     }
   });
 
-  if(formData.length === 0) {
-    alert("Veuillez cocher au moins un équipement.");
+  if (payload.length === 0) {
+    alert("Aucun équipement sélectionné");
     return;
   }
 
-  try {
-    const response = await fetch(webhookURL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData)
-    });
-    if(response.ok) alert("Valise envoyée !");
-    else alert("Erreur lors de l'envoi");
-  } catch(err) {
-    console.error("Erreur envoi webhook :", err);
-    alert("Erreur lors de l'envoi");
-  }
-});
+  const response = await fetch(WEBHOOK_SUBMIT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 
-initForm();
+  response.ok
+    ? alert("Valise envoyée avec succès")
+    : alert("Erreur lors de l'envoi");
+});
 </script>
+
 </body>
 </html>
