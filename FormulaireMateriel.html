@@ -21,33 +21,23 @@
 </form>
 
 <script>
-// Webhook de réception des données du formulaire
-const webhookURL = "https://n8n.srv1108117.hstgr.cloud/webhook/valise-form"; // Remplace par ton webhook de traitement
+const webhookURL = "https://ton-n8n-instance.com/webhook/valise-form"; 
+const equipmentsWebhookURL = "https://n8n.srv1108117.hstgr.cloud/webhook/get-equipements"; 
 
-// Webhook pour récupérer les équipements depuis Notion via n8n
-const equipmentsWebhookURL = "https://n8n.srv1108117.hstgr.cloud/webhook/get-equipements"; // webhook de production
-
-// Récupère les équipements depuis le webhook
 async function fetchEquipments() {
   try {
     const response = await fetch(equipmentsWebhookURL);
     const data = await response.json();
-    if(!Array.isArray(data)) {
-      console.error("La réponse du webhook n'est pas un tableau :", data);
-      return [];
-    }
-    return data;
+    return Array.isArray(data) ? data : [];
   } catch (err) {
-    console.error("Erreur lors du fetch des équipements :", err);
+    console.error("Erreur fetch équipements :", err);
     return [];
   }
 }
 
-// Initialisation du formulaire
 async function initForm() {
   const equipments = await fetchEquipments();
 
-  // Filtrer les locations valides
   const locationsSet = new Set(
     equipments.map(e => e.property_location).filter(loc => loc)
   );
@@ -60,22 +50,28 @@ async function initForm() {
     destinationSelect.appendChild(d);
   });
 
-  // Générer la liste des équipements
   const container = document.getElementById("equipementsContainer");
   equipments.forEach(e => {
-    if(e.name && e.property_quantity_in_stock != null) {
+    if(e.name) {
       const div = document.createElement("div");
       div.innerHTML = `
         <input type="checkbox" name="equipement" value="${e.name}" id="${e.name}">
-        <label for="${e.name}">${e.name} (${e.property_quantity_in_stock} dispo)</label>
-        Quantité: <input type="number" name="qty_${e.name}" min="0" value="0">
+        <label for="${e.name}">${e.name}</label>
+        Quantité: <input type="number" name="qty_${e.name}" min="0" value="0" disabled>
       `;
       container.appendChild(div);
+
+      // Activation du champ quantité uniquement si la case est cochée
+      const checkbox = div.querySelector(`input[name="equipement"]`);
+      const qtyInput = div.querySelector(`input[type="number"]`);
+      checkbox.addEventListener("change", () => {
+        qtyInput.disabled = !checkbox.checked;
+        if(!checkbox.checked) qtyInput.value = 0; // reset à 0 si décoché
+      });
     }
   });
 }
 
-// Envoi du formulaire au webhook
 document.getElementById("valiseForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const origine = document.getElementById("origine").value;
@@ -84,8 +80,7 @@ document.getElementById("valiseForm").addEventListener("submit", async (e) => {
   const formData = [];
   document.querySelectorAll("input[name='equipement']").forEach(checkbox => {
     if (checkbox.checked) {
-      const qtyInput = document.querySelector(`input[name="qty_${checkbox.value}"]`);
-      const qty = parseInt(qtyInput.value) || 0;
+      const qty = parseInt(document.querySelector(`input[name="qty_${checkbox.value}"]`).value) || 0;
       formData.push({
         equipement: checkbox.value,
         quantite: qty,
@@ -109,12 +104,11 @@ document.getElementById("valiseForm").addEventListener("submit", async (e) => {
     if(response.ok) alert("Valise envoyée !");
     else alert("Erreur lors de l'envoi");
   } catch(err) {
-    console.error("Erreur lors de l'envoi au webhook :", err);
+    console.error("Erreur envoi webhook :", err);
     alert("Erreur lors de l'envoi");
   }
 });
 
-// Initialiser le formulaire au chargement
 initForm();
 </script>
 </body>
